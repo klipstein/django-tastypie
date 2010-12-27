@@ -206,7 +206,6 @@ class Resource(object):
         import sys
         the_trace = '\n'.join(traceback.format_exception(*(sys.exc_info())))
         
-        print the_trace
         if settings.DEBUG:
             data = {
                 "error_message": exception.message,
