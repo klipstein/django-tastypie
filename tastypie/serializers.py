@@ -1,7 +1,14 @@
 import datetime
+from email import message_from_string
+from email.encoders import encode_noop, encode_7or8bit, encode_quopri
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEImage import MIMEImage
+from email.mime.application import MIMEApplication
+from email.Utils import make_msgid
 from StringIO import StringIO
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.serializers import json
 from django.template import loader, Context
 from django.utils import simplejson
@@ -34,18 +41,20 @@ class Serializer(object):
         * xml
         * yaml
         * html
+        * multipart/related (file upload handling)
     
     It was designed to make changing behavior easy, either by overridding the
     various format methods (i.e. ``to_json``), by changing the
     ``formats/content_types`` options or by altering the other hook methods.
     """
-    formats = ['json', 'jsonp', 'xml', 'yaml', 'html']
+    formats = ['json', 'jsonp', 'xml', 'yaml', 'html', 'multipart_related']
     content_types = {
         'json': 'application/json',
         'jsonp': 'text/javascript',
         'xml': 'application/xml',
         'yaml': 'text/yaml',
         'html': 'text/html',
+        'multipart_related': 'multipart/related'
     }
     
     def __init__(self, formats=None, content_types=None, datetime_formatting=None):
@@ -140,7 +149,7 @@ class Serializer(object):
         serialized = getattr(self, "to_%s" % desired_format)(bundle, options)
         return serialized
     
-    def deserialize(self, content, format='application/json'):
+    def deserialize(self, content, format='application/json', meta={}):
         """
         Given some data and a format, calls the correct method to deserialize
         the data and returns the result.
@@ -158,6 +167,8 @@ class Serializer(object):
         if desired_format is None:
             raise UnsupportedFormat("The format indicated '%s' had no available deserialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
         
+        if desired_format == 'multipart_related':
+            return getattr(self, "from_%s" % desired_format)(content, meta)
         deserialized = getattr(self, "from_%s" % desired_format)(content)
         return deserialized
 
@@ -372,6 +383,87 @@ class Serializer(object):
         implemented.
         """
         pass
+
+    def to_multipart_related(self, data, options=None):
+        # It does not make sense supporting the delivery of multipart/related content
+        raise NotImplementedError()
+
+    def from_multipart_related(self, content, meta):
+        """
+        Passing a multipart/related (RFC 2387) document and returns a Python 
+        dictionary of the decoded data.
+
+        The meta attribute of the request needs to be passed so it can extract
+        the Content-Type / Content-Length headers for building the complete
+        multipart/related document.
+        """
+
+        # normally the headers of multipart/related are contained in the META dict
+        # and we have to prepend them to the body content
+        # so it can be parsed by the mimeparser of the email module
+        if not content.split("\n", 1)[0].lower().replace(" ", "").\
+            startswith("content-type:multipart/related"):
+            prepend = "Content-Type: %s\nContent-Length: %s\n\n" % (
+                meta.get('CONTENT_TYPE'),
+                meta.get('CONTENT_LENGTH')
+            )
+            content = prepend + content
+
+        parsed = message_from_string(content)
+        parts = parsed.get_payload()
+
+        # determine the root part
+        start = parsed.get_param('start')
+        # normally the first body part represents the root
+        root_el = parts[0]
+        if start:
+            for (counter, el) in enumerate(parts):
+                if el.get('content-id') == start:
+                    root_el = el
+                    del parts[counter]
+                    break
+        else:
+            # remove the first element
+            del parts[0]
+
+        # creating a dict with content-id as key and a file object as value
+        content = {}
+        for p in parts:
+            # all elements need a content-id at that stage
+            content[p.get('content-id')[1:-1]] = SimpleUploadedFile(
+                p.get_filename(),
+                p.get_payload(decode=True),
+                p.get_content_type()
+            )
+
+        # now handling the root part deserialization (using this serializer!)
+        serializer = Serializer()
+        data = serializer.deserialize(
+            root_el.get_payload(decode=True),
+            root_el.get_content_type(),
+            meta
+        )
+
+        def replace_cid(data_dict, content):
+            """
+            Replacing all occurrences of "cid:" with the linked file objects
+            within the data dict.
+            """
+            for key in data_dict:
+                if type(data_dict[key]) == type("") and data_dict[key].startswith("cid:"):
+                    # let them point to a file object, that can be used by django
+                    try:
+                        data_dict[key] = content[data_dict[key][4:]]
+                    except KeyError:
+                        # if the file couldn't be found, clear that field
+                        data_dict[key] = None
+                if type(data_dict[key]) == type({}):
+                    data_dict[key] = replace_cid(data_dict[key], content)
+            return data_dict
+
+        # replacing all "cid:..." links recursively
+        data = replace_cid(data, content)
+        return data
 
 def get_type_string(data):
     """

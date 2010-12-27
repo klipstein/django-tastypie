@@ -206,6 +206,7 @@ class Resource(object):
         import sys
         the_trace = '\n'.join(traceback.format_exception(*(sys.exc_info())))
         
+        print the_trace
         if settings.DEBUG:
             data = {
                 "error_message": exception.message,
@@ -314,7 +315,8 @@ class Resource(object):
         
         Mostly a hook, this uses the ``Serializer`` from ``Resource._meta``.
         """
-        return self._meta.serializer.deserialize(data, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        # also transferring the whole META object (used by multipart/related serializer)
+        return self._meta.serializer.deserialize(data, format=request.META.get('CONTENT_TYPE', 'application/json'), meta=request.META)
     
     def dispatch_list(self, request, **kwargs):
         """
