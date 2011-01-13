@@ -140,7 +140,7 @@ class Serializer(object):
         serialized = getattr(self, "to_%s" % desired_format)(bundle, options)
         return serialized
     
-    def deserialize(self, content, format='application/json'):
+    def deserialize(self, content, format='application/json', request=None):
         """
         Given some data and a format, calls the correct method to deserialize
         the data and returns the result.
@@ -158,7 +158,7 @@ class Serializer(object):
         if desired_format is None:
             raise UnsupportedFormat("The format indicated '%s' had no available deserialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
         
-        deserialized = getattr(self, "from_%s" % desired_format)(content)
+        deserialized = getattr(self, "from_%s" % desired_format)(content, request)
         return deserialized
 
     def to_simple(self, data, options):
@@ -256,7 +256,7 @@ class Serializer(object):
                 element.text = force_unicode(simple_data)
         return element
 
-    def from_etree(self, data):
+    def from_etree(self, data, request=None):
         """
         Not the smartest deserializer on the planet. At the request level,
         it first tries to output the deserialized subelement called "object"
@@ -298,7 +298,7 @@ class Serializer(object):
         data = self.to_simple(data, options)
         return simplejson.dumps(data, cls=json.DjangoJSONEncoder, sort_keys=True)
 
-    def from_json(self, content):
+    def from_json(self, content, request=None):
         """
         Given some JSON data, returns a Python dictionary of the decoded data.
         """
@@ -323,7 +323,7 @@ class Serializer(object):
         
         return tostring(self.to_etree(data, options), xml_declaration=True, encoding='utf-8')
     
-    def from_xml(self, content):
+    def from_xml(self, content, request=None):
         """
         Given some XML data, returns a Python dictionary of the decoded data.
         """
@@ -343,7 +343,7 @@ class Serializer(object):
         
         return yaml.dump(self.to_simple(data, options))
     
-    def from_yaml(self, content):
+    def from_yaml(self, content, request=None):
         """
         Given some YAML data, returns a Python dictionary of the decoded data.
         """
@@ -363,7 +363,7 @@ class Serializer(object):
         options = options or {}
         return 'Sorry, not implemented yet. Please append "?format=json" to your URL.'
     
-    def from_html(self, content):
+    def from_html(self, content, request=None):
         """
         Reserved for future usage.
         

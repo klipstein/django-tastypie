@@ -315,7 +315,7 @@ class Resource(object):
         
         Mostly a hook, this uses the ``Serializer`` from ``Resource._meta``.
         """
-        return self._meta.serializer.deserialize(data, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        return self._meta.serializer.deserialize(data, format=request.META.get('CONTENT_TYPE', 'application/json'), request=request)
     
     def dispatch_list(self, request, **kwargs):
         """
