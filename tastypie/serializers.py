@@ -46,6 +46,7 @@ class Serializer(object):
         'xml': 'application/xml',
         'yaml': 'text/yaml',
         'html': 'text/html',
+        'formdata': 'multipart/form-data'
     }
     
     def __init__(self, formats=None, content_types=None, datetime_formatting=None):
@@ -140,7 +141,7 @@ class Serializer(object):
         serialized = getattr(self, "to_%s" % desired_format)(bundle, options)
         return serialized
     
-    def deserialize(self, content, format='application/json', request=None):
+    def deserialize(self, request, format='application/json'):
         """
         Given some data and a format, calls the correct method to deserialize
         the data and returns the result.
@@ -154,11 +155,14 @@ class Serializer(object):
                 if hasattr(self, "from_%s" % short_format):
                     desired_format = short_format
                     break
-        
         if desired_format is None:
             raise UnsupportedFormat("The format indicated '%s' had no available deserialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
-        
-        deserialized = getattr(self, "from_%s" % desired_format)(content, request)
+        # accessing raw_post_data will make the request unusable, so we access it later
+        if desired_format == "formdata":
+            content = request
+        else:
+            content = request.raw_post_data
+        deserialized = getattr(self, "from_%s" % desired_format)(content)
         return deserialized
 
     def to_simple(self, data, options):
@@ -372,6 +376,17 @@ class Serializer(object):
         implemented.
         """
         pass
+    
+    def from_formdata(self, request):
+        """
+        Given the raw post data and the request as multipart/form-data.
+        
+        This deserializer can handle file-uploads through a browser.
+        """
+        post_data = request.POST.copy()
+        post_data.update(request.FILES)
+        return post_data
+        
 
 def get_type_string(data):
     """
