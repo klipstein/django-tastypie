@@ -29,3 +29,8 @@ echo
 echo
 echo "** Namespaced **"
 django-admin.py test namespaced --settings=settings_namespaced
+
+echo
+echo
+echo "** Files **"
+django-admin.py test files --settings=settings_files --traceback
