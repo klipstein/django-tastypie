@@ -1,0 +1,10 @@
+[
+    {
+        "fields": {
+            "name": "A picture as note",
+            "file": "uploads/test_image1.jpg"
+        },
+        "model": "files.filenote",
+        "pk": 1
+    }
+]
