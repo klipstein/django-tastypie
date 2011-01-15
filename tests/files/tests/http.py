@@ -44,4 +44,23 @@ class HTTPTestCase(TestServerTestCase):
         request = urllib2.Request('http://localhost:8001/api/v1/filenotes/', datagen, headers)
         request.get_method = lambda: 'POST'
         ret = urllib2.urlopen(request)
-        #print ret.headers
+        self.assertEqual(ret.code, 201)
+        self.assertEqual(ret.headers.dict['location'], 'http://localhost:8001/api/v1/filenotes/2/')
+        
+        # make sure posted object exists
+        connection = self.get_connection()
+        connection.request('GET', '/api/v1/filenotes/2/', headers={'Accept': 'application/json'})
+        response = connection.getresponse()
+        connection.close()
+
+        self.assertEqual(response.status, 200)
+
+        data = response.read()
+        obj = json.loads(data)
+        
+        self.assertEqual(obj['name'], 'A new note.')
+        self.assertEqual(obj['file'], '/media/uploads/test_image2.jpg')
+        
+        # cleanup previous uploaded files
+        os.remove(os.path.join(settings.MEDIA_ROOT, 'uploads', 'test_image2.jpg'))
+        

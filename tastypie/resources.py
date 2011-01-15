@@ -306,7 +306,7 @@ class Resource(object):
         
         return self._meta.serializer.serialize(data, format, options)
     
-    def deserialize(self, request, format='application/json'):
+    def deserialize(self, request, data, format='application/json'):
         """
         Given a request, data and a format, deserializes the given data.
         
@@ -315,7 +315,7 @@ class Resource(object):
         
         Mostly a hook, this uses the ``Serializer`` from ``Resource._meta``.
         """
-        return self._meta.serializer.deserialize(request, format=request.META.get('CONTENT_TYPE', 'application/json').split(" ")[0])
+        return self._meta.serializer.deserialize(data, format=request.META.get('CONTENT_TYPE', 'application/json').split(" ")[0])
     
     def dispatch_list(self, request, **kwargs):
         """
@@ -882,6 +882,14 @@ class Resource(object):
         """
         raise NotImplementedError()
     
+    def extract_data(self, request):
+        is_multipart_formdata = request.META.get('CONTENT_TYPE', '').startswith('multipart/form-data')
+        if is_multipart_formdata:
+            post_data = request.POST.copy()
+            post_data.update(request.FILES)
+            return post_data
+        return request.raw_post_data
+    
     # Views.
     
     def get_list(self, request, **kwargs):
@@ -934,7 +942,7 @@ class Resource(object):
         
         Return ``HttpAccepted`` (204 No Content).
         """
-        deserialized = self.deserialize(request, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        deserialized = self.deserialize(request, self.extract_data(request), format=request.META.get('CONTENT_TYPE', 'application/json'))
         
         if not 'objects' in deserialized:
             raise BadRequest("Invalid data sent.")
@@ -969,7 +977,7 @@ class Resource(object):
         If a new resource is created, return ``HttpCreated`` (201 Created).
         If an existing resource is modified, return ``HttpAccepted`` (204 No Content).
         """
-        deserialized = self.deserialize(request, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        deserialized = self.deserialize(request, self.extract_data(request), format=request.META.get('CONTENT_TYPE', 'application/json'))
         bundle = self.build_bundle(data=dict_strip_unicode_keys(deserialized))
         self.is_valid(bundle, request)
         
@@ -989,7 +997,7 @@ class Resource(object):
         
         If a new resource is created, return ``HttpCreated`` (201 Created).
         """
-        deserialized = self.deserialize(request, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        deserialized = self.deserialize(request, self.extract_data(request), format=request.META.get('CONTENT_TYPE', 'application/json'))
         bundle = self.build_bundle(data=dict_strip_unicode_keys(deserialized))
         self.is_valid(bundle, request)
         updated_bundle = self.obj_create(bundle, request=request)

@@ -141,7 +141,7 @@ class Serializer(object):
         serialized = getattr(self, "to_%s" % desired_format)(bundle, options)
         return serialized
     
-    def deserialize(self, request, format='application/json'):
+    def deserialize(self, content, format='application/json'):
         """
         Given some data and a format, calls the correct method to deserialize
         the data and returns the result.
@@ -157,11 +157,6 @@ class Serializer(object):
                     break
         if desired_format is None:
             raise UnsupportedFormat("The format indicated '%s' had no available deserialization method. Please check your ``formats`` and ``content_types`` on your Serializer." % format)
-        # accessing raw_post_data will make the request unusable, so we access it later
-        if desired_format == "formdata":
-            content = request
-        else:
-            content = request.raw_post_data
         deserialized = getattr(self, "from_%s" % desired_format)(content)
         return deserialized
 
@@ -260,7 +255,7 @@ class Serializer(object):
                 element.text = force_unicode(simple_data)
         return element
 
-    def from_etree(self, data, request=None):
+    def from_etree(self, data):
         """
         Not the smartest deserializer on the planet. At the request level,
         it first tries to output the deserialized subelement called "object"
@@ -302,7 +297,7 @@ class Serializer(object):
         data = self.to_simple(data, options)
         return simplejson.dumps(data, cls=json.DjangoJSONEncoder, sort_keys=True)
 
-    def from_json(self, content, request=None):
+    def from_json(self, content):
         """
         Given some JSON data, returns a Python dictionary of the decoded data.
         """
@@ -327,7 +322,7 @@ class Serializer(object):
         
         return tostring(self.to_etree(data, options), xml_declaration=True, encoding='utf-8')
     
-    def from_xml(self, content, request=None):
+    def from_xml(self, content):
         """
         Given some XML data, returns a Python dictionary of the decoded data.
         """
@@ -347,7 +342,7 @@ class Serializer(object):
         
         return yaml.dump(self.to_simple(data, options))
     
-    def from_yaml(self, content, request=None):
+    def from_yaml(self, content):
         """
         Given some YAML data, returns a Python dictionary of the decoded data.
         """
@@ -367,7 +362,7 @@ class Serializer(object):
         options = options or {}
         return 'Sorry, not implemented yet. Please append "?format=json" to your URL.'
     
-    def from_html(self, content, request=None):
+    def from_html(self, content):
         """
         Reserved for future usage.
         
@@ -377,15 +372,14 @@ class Serializer(object):
         """
         pass
     
-    def from_formdata(self, request):
+    def from_formdata(self, content):
         """
         Given the raw post data and the request as multipart/form-data.
         
         This deserializer can handle file-uploads through a browser.
         """
-        post_data = request.POST.copy()
-        post_data.update(request.FILES)
-        return post_data
+        # no further processing required
+        return content
         
 
 def get_type_string(data):
